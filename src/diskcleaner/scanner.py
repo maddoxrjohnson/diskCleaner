@@ -41,6 +41,53 @@ BULK_DIR_NAMES = {
     "bower_components",
 }
 
+# These names are common enough that apps use them for their own stuff too
+# (Eclipse keeps plugin jars in a folder called "target", for one). Only treat
+# them as build output when the folder next to them looks like a project.
+GENERIC_BUILD_NAMES = {"build", "dist", "out", "target", "obj"}
+PROJECT_MARKERS = {
+    ".git",
+    "package.json",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "build.xml",
+    "pubspec.yaml",
+    "cargo.toml",
+    "go.mod",
+    "cmakelists.txt",
+    "makefile",
+    "meson.build",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "gemfile",
+    "composer.json",
+    "mix.exs",
+}
+PROJECT_MARKER_EXTS = (".sln", ".csproj", ".fsproj", ".vbproj", ".vcxproj")
+# tool folders whose "build" subfolder is always generated
+TOOL_PARENTS = {".dart_tool", ".gradle", ".angular", ".svelte-kit"}
+VENV_NAMES = {".venv", "venv", "env"}
+
+
+def _is_bulk_dir(entry: os.DirEntry, parent_name: str, siblings: set[str]) -> bool:
+    name = entry.name.lower()
+    if name not in BULK_DIR_NAMES:
+        return False
+    if name in VENV_NAMES:
+        # a real virtualenv always has this; plenty of other things are called "env"
+        return os.path.isfile(os.path.join(entry.path, "pyvenv.cfg"))
+    if name in GENERIC_BUILD_NAMES:
+        return (
+            parent_name in TOOL_PARENTS
+            or bool(siblings & PROJECT_MARKERS)
+            or any(s.endswith(PROJECT_MARKER_EXTS) for s in siblings)
+        )
+    return True
+
 
 @dataclass
 class Candidate:
@@ -141,56 +188,64 @@ def scan(
         found_here: list[Candidate] = []
 
         with it:
-            for entry in it:
-                try:
-                    if _is_link_like(entry):
-                        continue
-                    depth = len(Path(entry.path).parts) - root_depth
-                    if entry.name.lower().endswith((".dll", ".so", ".dylib")):
-                        has_dlls = True
+            try:
+                entries = list(it)
+            except OSError:
+                result.errors += 1
+                continue
+        siblings = {e.name.lower() for e in entries}
+        parent_name = os.path.basename(current).lower()
 
-                    if entry.is_dir(follow_symlinks=False):
-                        if is_protected(entry.path):
-                            continue
-                        if entry.name.lower() in BULK_DIR_NAMES:
-                            size, count, mtime, atime = dir_stats(entry.path)
-                            result.files_seen += count
-                            result.bytes_seen += size
-                            if size >= min_dir_size:
-                                result.candidates.append(
-                                    Candidate(
-                                        path=entry.path,
-                                        size=size,
-                                        is_dir=True,
-                                        mtime=mtime,
-                                        atime=atime,
-                                        file_count=count,
-                                        depth=depth,
-                                    )
+        for entry in entries:
+            try:
+                if _is_link_like(entry):
+                    continue
+                depth = len(Path(entry.path).parts) - root_depth
+                if entry.name.lower().endswith((".dll", ".so", ".dylib")):
+                    has_dlls = True
+
+                if entry.is_dir(follow_symlinks=False):
+                    if is_protected(entry.path):
+                        continue
+                    if _is_bulk_dir(entry, parent_name, siblings):
+                        size, count, mtime, atime = dir_stats(entry.path)
+                        result.files_seen += count
+                        result.bytes_seen += size
+                        if size >= min_dir_size:
+                            result.candidates.append(
+                                Candidate(
+                                    path=entry.path,
+                                    size=size,
+                                    is_dir=True,
+                                    mtime=mtime,
+                                    atime=atime,
+                                    file_count=count,
+                                    depth=depth,
                                 )
-                        else:
-                            stack.append(entry.path)
-                        continue
-
-                    st = entry.stat(follow_symlinks=False)
-                except OSError:
-                    result.errors += 1
+                            )
+                    else:
+                        stack.append(entry.path)
                     continue
 
-                result.files_seen += 1
-                result.bytes_seen += st.st_size
-                if st.st_size >= min_file_size:
-                    found_here.append(
-                        Candidate(
-                            path=entry.path,
-                            size=st.st_size,
-                            is_dir=False,
-                            mtime=st.st_mtime,
-                            atime=st.st_atime,
-                            depth=depth,
-                            ext=os.path.splitext(entry.name)[1].lower(),
-                        )
+                st = entry.stat(follow_symlinks=False)
+            except OSError:
+                result.errors += 1
+                continue
+
+            result.files_seen += 1
+            result.bytes_seen += st.st_size
+            if st.st_size >= min_file_size:
+                found_here.append(
+                    Candidate(
+                        path=entry.path,
+                        size=st.st_size,
+                        is_dir=False,
+                        mtime=st.st_mtime,
+                        atime=st.st_atime,
+                        depth=depth,
+                        ext=os.path.splitext(entry.name)[1].lower(),
                     )
+                )
 
         # An .exe sitting next to DLLs is an installed program, not a setup file.
         # rules.py uses this to tell e.g. a game's exe apart from an installer.

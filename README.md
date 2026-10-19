@@ -80,7 +80,11 @@ scan -> safety rules -> heuristics -> model -> review (you) -> labels
 **Scanning** (`scanner.py`) is an iterative `os.scandir` walk that never follows
 symlinks or Windows junctions. Folders that are almost always regenerable
 (`node_modules`, `.venv`, `target`, `__pycache__`, ...) are sized as one unit
-and not descended into, which keeps scans quick. On my machine it gets through
+and not descended into, which keeps scans quick. Generic names like `build`,
+`dist` or `target` only count when there's a project file next to them
+(`package.json`, `pom.xml`, `pubspec.yaml`, `Cargo.toml`, a `.csproj`, ...), and
+`venv`/`env` only count if they're real virtualenvs. Eclipse, for example,
+keeps plugin jars in a folder named `target`, and that is not build output. On my machine it gets through
 about 370k files in around 20 seconds.
 
 **Safety rules** (`safety.py`) are plain hard-coded checks that run before
