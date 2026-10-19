@@ -77,3 +77,31 @@ def test_sh_script_skips_changed_and_missing_files(tmp_path):
     assert log.read_text().splitlines() == [str(keep_same)]
     assert "skip (changed since scan)" in out
     assert "skip (no longer exists)" in out
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="needs Windows PowerShell")
+def test_ps1_reports_failures_honestly(tmp_path):
+    ok = make_file(tmp_path / "ok" / "a.txt", 10, age_days=60)
+    locked = make_file(tmp_path / "locked" / "b.txt", 10, age_days=60)
+    single = make_file(tmp_path / "single file.txt", 10, age_days=60)
+    items = [
+        ExportItem(str(ok.parent), 10, True),
+        ExportItem(str(locked.parent), 10, True),
+        ExportItem(str(single), 10, False),
+    ]
+    script = write_script(items, scan_time=time.time() - 86400, fmt="ps1", out_dir=tmp_path)
+
+    # python opens files without FILE_SHARE_DELETE, so this blocks the move
+    with open(locked, "rb"):
+        out = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+            capture_output=True,
+            text=True,
+        ).stdout
+
+    assert f"recycled: {ok.parent}" in out
+    assert f"recycled: {single}" in out
+    assert f"FAILED: {locked.parent}" in out
+    assert f"recycled: {locked.parent}" not in out
+    assert "1 item(s) failed" in out
+    assert locked.exists()

@@ -58,6 +58,7 @@ $ErrorActionPreference = 'Continue'
 Add-Type -AssemblyName Microsoft.VisualBasic
 $ScanTime = [DateTimeOffset]::FromUnixTimeSeconds({scan_ts}).UtcDateTime
 $Freed = 0
+$Failed = 0
 
 function Move-ToRecycleBin([string]$Path, [long]$Size, [bool]$IsDir) {{
     if (-not (Test-Path -LiteralPath $Path)) {{
@@ -68,14 +69,34 @@ function Move-ToRecycleBin([string]$Path, [long]$Size, [bool]$IsDir) {{
         $newer = Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue |
             Where-Object {{ $_.LastWriteTimeUtc -gt $ScanTime }} | Select-Object -First 1
         if ($newer) {{ Write-Host "skip (changed since scan): $Path"; return }}
-        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(
-            $Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
-    }} else {{
-        if ($item.Length -ne $Size -or $item.LastWriteTimeUtc -gt $ScanTime) {{
-            Write-Host "skip (changed since scan): $Path"; return
+    }} elseif ($item.Length -ne $Size -or $item.LastWriteTimeUtc -gt $ScanTime) {{
+        Write-Host "skip (changed since scan): $Path"; return
+    }}
+
+    try {{
+        if ($IsDir) {{
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(
+                $Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
+        }} else {{
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(
+                $Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
         }}
-        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(
-            $Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
+    }} catch {{
+        # the message Windows gives here is often useless ("not supported on
+        # this system" really means access denied), so add the likely cause
+        $script:Failed++
+        Write-Host "FAILED: $Path" -ForegroundColor Red
+        $err = $_.Exception
+        if ($err.InnerException) {{ $err = $err.InnerException }}
+        Write-Host "  $($err.Message)"
+        Write-Host "  usually a file in there is open in another program, or needs admin rights"
+        return
+    }}
+    # don't take the call's word for it
+    if (Test-Path -LiteralPath $Path) {{
+        $script:Failed++
+        Write-Host "FAILED (still there, maybe partly recycled): $Path" -ForegroundColor Red
+        return
     }}
     $script:Freed += $Size
     Write-Host "recycled: $Path"
@@ -88,6 +109,7 @@ REF="$(mktemp)"
 trap 'rm -f "$REF"' EXIT
 touch -t {scan_stamp} "$REF"
 FREED=0
+FAILED=0
 
 to_trash() {{
     if command -v gio >/dev/null 2>&1; then gio trash -- "$1"
@@ -114,9 +136,12 @@ move_to_trash() {{
     if [ "$is_dir" = 0 ] && [ "$(file_size "$path")" != "$size" ]; then
         echo "skip (changed since scan): $path"; return
     fi
-    if to_trash "$path"; then
+    if to_trash "$path" && [ ! -e "$path" ]; then
         FREED=$((FREED + size))
         echo "trashed: $path"
+    else
+        FAILED=$((FAILED + 1))
+        echo "FAILED: $path" >&2
     fi
 }}
 """
@@ -147,6 +172,10 @@ def render(items: list[ExportItem], *, scan_time: float, fmt: str) -> str:
         lines.append(
             'Write-Host ("done, about {0:N1} GB moved to the Recycle Bin" -f ($Freed / 1GB))'
         )
+        lines.append(
+            'if ($Failed) { Write-Host "$Failed item(s) failed, see FAILED above" '
+            "-ForegroundColor Yellow }"
+        )
     elif fmt == "sh":
         lines = ["#!/usr/bin/env bash"] + [f"# {x}".rstrip() for x in intro]
         scan_stamp = time.strftime("%Y%m%d%H%M.%S", time.localtime(scan_time))
@@ -156,6 +185,9 @@ def render(items: list[ExportItem], *, scan_time: float, fmt: str) -> str:
             lines.append(f"move_to_trash {shlex.quote(i.path)} {i.size} {int(i.is_dir)}")
         lines.append("")
         lines.append('echo "done, about $((FREED / 1024 / 1024)) MB moved to the trash"')
+        lines.append(
+            'if [ "$FAILED" -gt 0 ]; then echo "$FAILED item(s) failed, see FAILED above" >&2; fi'
+        )
     else:
         raise ValueError(f"unknown format: {fmt}")
 
