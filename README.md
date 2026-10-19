@@ -59,6 +59,7 @@ In `review`:
 | `u`     | undo the label                                 |
 | `space` | expand a group (e.g. "14 x node_modules")      |
 | `o`     | show it in Explorer / Finder                   |
+| `c`     | copy the path (or all paths in a group)        |
 | `e`     | export the cleanup script                      |
 | `q`     | save and quit                                  |
 

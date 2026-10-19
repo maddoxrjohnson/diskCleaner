@@ -54,3 +54,18 @@ def test_undo_and_expand():
     run(app, ["space", "down", "d", "up", "u"])
     assert app.labels == {}
     assert len(app.rows) == 3  # group + two children
+
+
+def test_copy_path(monkeypatch):
+    copied = []
+    monkeypatch.setattr(
+        "diskcleaner.tui.copy_to_system_clipboard", lambda t: copied.append(t) or True
+    )
+    items = [
+        sugg("/h/Downloads/a.exe", 500),
+        sugg("/h/p1/node_modules", 200, "package_cache", is_dir=True),
+        sugg("/h/p2/node_modules", 100, "package_cache", is_dir=True),
+    ]
+    app = ReviewApp(items, {}, lambda s, lab: None, lambda: "ok")
+    run(app, ["c", "down", "c"])
+    assert copied == ["/h/Downloads/a.exe", "/h/p1/node_modules\n/h/p2/node_modules"]

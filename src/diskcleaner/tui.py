@@ -27,6 +27,25 @@ MARKS = {
 }
 
 
+def copy_to_system_clipboard(text: str) -> bool:
+    """Native clipboard first, since not every terminal supports OSC 52."""
+    if sys.platform == "win32":
+        cmd = ["clip"]
+    elif sys.platform == "darwin":
+        cmd = ["pbcopy"]
+    elif "microsoft" in os.uname().release.lower():
+        cmd = ["clip.exe"]
+    else:
+        cmd = ["wl-copy"] if os.environ.get("WAYLAND_DISPLAY") else ["xclip", "-sel", "clip"]
+    try:
+        # clip.exe reads the console code page, utf-16 keeps non-ascii paths intact
+        data = text.encode("utf-16-le") if cmd[0] in ("clip", "clip.exe") else text.encode()
+        subprocess.run(cmd, input=data, check=True, timeout=5)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def reveal_in_file_manager(path: str) -> None:
     try:
         if sys.platform == "win32":
@@ -56,6 +75,7 @@ class ReviewApp(App):
         Binding("u", "label(None)", "Undo"),
         Binding("space", "toggle_group", "Expand"),
         Binding("o", "reveal", "Open"),
+        Binding("c", "copy_path", "Copy path"),
         Binding("e", "export", "Export"),
         Binding("q", "quit", "Save & quit"),
     ]
@@ -236,6 +256,16 @@ class ReviewApp(App):
             return
         self.expanded ^= {value}
         self.rebuild()
+
+    def action_copy_path(self) -> None:
+        items = self.current()
+        if not items:
+            return
+        text = "\n".join(s.path for s in items)
+        if not copy_to_system_clipboard(text):
+            self.copy_to_clipboard(text)  # OSC 52 fallback, works in most modern terminals
+        what = "path" if len(items) == 1 else f"{len(items)} paths"
+        self.notify(f"Copied {what} to the clipboard")
 
     def action_reveal(self) -> None:
         items = self.current()
