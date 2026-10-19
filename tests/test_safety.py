@@ -83,3 +83,11 @@ def test_files_at_the_top_of_a_drive():
     # but a folder like C:\Temp is fine
     assert reject_reason("/mnt/c/Temp", OLD, is_dir=True) is None
     assert reject_reason("/mnt/c/Temp/old.log", OLD) is None
+
+
+def test_app_managed_items_are_never_suggested():
+    path = "/mnt/c/Users/me/.android/avd/Pixel_6.avd"
+    assert reject_reason(path, OLD, is_dir=True) is None
+    assert reject_reason(path, OLD, is_dir=True, managed_by="Android emulator") == (
+        "managed by another app"
+    )

@@ -59,6 +59,7 @@ def classify(
             c.mtime,
             is_dir=c.is_dir,
             is_duplicate=dup_of is not None,
+            managed_by=c.extra.get("managed_by"),
             min_age_days=min_age_days,
             now=now,
         )

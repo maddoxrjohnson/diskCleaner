@@ -165,6 +165,7 @@ def reject_reason(
     *,
     is_dir: bool = False,
     is_duplicate: bool = False,
+    managed_by: str | None = None,
     min_age_days: int = DEFAULT_MIN_AGE_DAYS,
     now: float | None = None,
 ) -> str | None:
@@ -174,6 +175,8 @@ def reject_reason(
         return "drive root"
     if is_protected(path):
         return "protected location"
+    if managed_by:
+        return "managed by another app"
     # files sitting right in C:\ (or /) are things like pagefile.sys and
     # hiberfil.sys. Folders there, like C:\Temp, are still fair game.
     if len(parts) == 1 and not is_dir:

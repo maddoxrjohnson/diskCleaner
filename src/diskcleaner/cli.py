@@ -143,6 +143,21 @@ def scan_cmd(
         console.print(table)
         console.print("Run [bold]diskcleaner review[/] to go through them.")
 
+    managed = sorted(
+        (c for c in classified if c.candidate.extra.get("managed_by")),
+        key=lambda c: -c.candidate.size,
+    )
+    if managed:
+        console.print(
+            "\n[bold]Also big, but not suggested[/] - these belong to another app, "
+            "so remove them there instead of deleting files:"
+        )
+        for c in managed:
+            console.print(
+                f"  {human_size(c.candidate.size):>9}  {c.candidate.path}\n"
+                f"             [dim]{c.candidate.extra['managed_by']}[/]"
+            )
+
 
 @app.command()
 def review(

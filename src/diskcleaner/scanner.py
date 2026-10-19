@@ -73,6 +73,29 @@ TOOL_PARENTS = {".dart_tool", ".gradle", ".angular", ".svelte-kit"}
 VENV_NAMES = {".venv", "venv", "env"}
 
 
+def managed_by(name: str, parent_name: str, is_dir: bool) -> str | None:
+    """Virtual machines and emulators only make sense as a whole, and deleting
+    their files by hand leaves the owning app with a broken entry. We keep
+    them together as one item and point at the proper way to remove them."""
+    name = name.lower()
+    if is_dir:
+        if name.endswith(".avd"):
+            return "Android emulator: remove it in Android Studio > Device Manager"
+        if parent_name == "virtualbox vms":
+            return "VirtualBox VM: remove it in VirtualBox (Remove > Delete all files)"
+        if name.endswith(".vmwarevm") or parent_name == "virtual machines":
+            return "VMware VM: remove it in VMware (Manage > Delete from disk)"
+        if name.endswith(".utm"):
+            return "UTM VM: remove it in UTM"
+        if name.endswith(".pvm"):
+            return "Parallels VM: remove it in Parallels Control Center"
+        if name == "hyper-v":
+            return "Hyper-V VMs: remove them in Hyper-V Manager"
+    elif name == "ext4.vhdx":
+        return "WSL distro disk: remove it with `wsl --unregister <distro>`"
+    return None
+
+
 def _is_bulk_dir(entry: os.DirEntry, parent_name: str, siblings: set[str]) -> bool:
     name = entry.name.lower()
     if name not in BULK_DIR_NAMES:
@@ -207,7 +230,8 @@ def scan(
                 if entry.is_dir(follow_symlinks=False):
                     if is_protected(entry.path):
                         continue
-                    if _is_bulk_dir(entry, parent_name, siblings):
+                    owner = managed_by(entry.name, parent_name, is_dir=True)
+                    if owner or _is_bulk_dir(entry, parent_name, siblings):
                         size, count, mtime, atime = dir_stats(entry.path)
                         result.files_seen += count
                         result.bytes_seen += size
@@ -221,6 +245,7 @@ def scan(
                                     atime=atime,
                                     file_count=count,
                                     depth=depth,
+                                    extra={"managed_by": owner} if owner else {},
                                 )
                             )
                     else:
@@ -246,6 +271,9 @@ def scan(
                         ext=os.path.splitext(entry.name)[1].lower(),
                     )
                 )
+                owner = managed_by(entry.name, parent_name, is_dir=False)
+                if owner:
+                    found_here[-1].extra["managed_by"] = owner
 
         # An .exe sitting next to DLLs is an installed program, not a setup file.
         # rules.py uses this to tell e.g. a game's exe apart from an installer.

@@ -127,3 +127,22 @@ def test_only_real_virtualenvs_count(tmp_path):
         make_file(tmp_path / "other" / "env" / f"conf{i}.dat", 1 * MB)
 
     assert dir_candidates(tmp_path) == {"proj/.venv"}
+
+
+def test_virtual_machines_stay_in_one_piece(tmp_path):
+    avd = tmp_path / ".android" / "avd" / "Pixel_6.avd"
+    make_file(avd / "snapshots" / "default_boot" / "ram.img", 400 * MB)
+    make_file(avd / "userdata-qemu.img.qcow2", 200 * MB)
+    make_file(avd / "sdcard.img", 60 * MB)
+    make_file(tmp_path / "VirtualBox VMs" / "Ubuntu" / "Ubuntu.vdi", 300 * MB)
+    make_file(tmp_path / "WSL" / "ext4.vhdx", 100 * MB)
+
+    found = {
+        os.path.relpath(c.path, tmp_path).replace(os.sep, "/"): c for c in scan(tmp_path).candidates
+    }
+
+    assert set(found) == {".android/avd/Pixel_6.avd", "VirtualBox VMs/Ubuntu", "WSL/ext4.vhdx"}
+    assert found[".android/avd/Pixel_6.avd"].size == 660 * MB
+    assert "Android Studio" in found[".android/avd/Pixel_6.avd"].extra["managed_by"]
+    assert "VirtualBox" in found["VirtualBox VMs/Ubuntu"].extra["managed_by"]
+    assert "wsl --unregister" in found["WSL/ext4.vhdx"].extra["managed_by"]

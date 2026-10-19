@@ -93,6 +93,7 @@ anything else, and nothing downstream can override them:
 
 - system folders (`C:\Windows`, `Program Files`, `Windows.old`, OEM recovery/driver folders, `/usr`, `/System`, ...) are never scanned
 - files sitting directly in a drive root (`pagefile.sys`, `hiberfil.sys`, ...) are never suggested
+- virtual machines and emulators (Android `.avd`, VirtualBox, VMware, Hyper-V, WSL disks) are kept as one item and never suggested, since deleting their files by hand breaks them. The scan lists them separately with how to remove them properly.
 - `.git`, `.ssh`, credential folders and cloud-synced folders (OneDrive, Dropbox, iCloud) are never suggested
 - game libraries (`steamapps`, Epic, GOG, Xbox, ...) are never suggested, since those should be uninstalled through their launcher
 - anything modified in the last 30 days is left alone
