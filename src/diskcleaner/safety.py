@@ -67,6 +67,17 @@ NEVER_TOUCH_PARTS = {
     "icloud drive",
     "google drive",
     "mobile documents",
+    # game libraries belong to their launcher - uninstall through it instead,
+    # otherwise e.g. Steam still thinks the game is installed
+    "steamapps",
+    "epic games",
+    "gog galaxy",
+    "gog games",
+    "riot games",
+    "ea games",
+    "ubisoft game launcher",
+    "xboxgames",
+    "battle.net",
 }
 
 # App config lives in these. We only allow suggestions inside them when the

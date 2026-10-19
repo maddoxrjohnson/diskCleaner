@@ -38,3 +38,26 @@ def test_folders_above_the_scan_root_dont_count():
     c = cand("/tmp/abc/home/Downloads/setup.exe", ext=".exe")
     c.depth = 2
     assert categorize(c) == "installer"
+
+
+def test_installer_vs_program():
+    def exe(path, depth=2, **extra):
+        c = cand(path, ext=".exe")
+        c.depth = depth
+        c.extra.update(extra)
+        return categorize(c)
+
+    # real installers, named or located like downloads
+    assert exe("/h/Desktop/msys2-x86_64-20250830.exe", depth=1) == "installer"
+    assert exe("/h/Downloads/DiscordSetup.exe", depth=1) == "installer"
+    assert exe("/h/Downloads/somegame.exe", depth=1) == "installer"
+    assert exe("/h/stuff/node-v22.15.0-x64.exe") == "installer"
+    # game / app executables are not
+    assert exe("/h/Games/Balatro/Balatro.exe") == "program"
+    assert exe("/h/Games/Bloons/btdb2_game.exe", next_to_libraries=True) == "program"
+    # an exe next to DLLs is installed, even if the name looks setup-ish
+    assert exe("/h/Tools/App/updater-x64.exe", next_to_libraries=True) == "program"
+    # package formats are always installers
+    msi = cand("/h/stuff/tool.msi", ext=".msi")
+    msi.depth = 2
+    assert categorize(msi) == "installer"

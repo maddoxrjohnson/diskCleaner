@@ -18,6 +18,9 @@ OLD = time.time() - 400 * 86400
         "/home/me/code/repo/.git/objects/pack/pack-1.pack",
         "/home/me/OneDrive/backup.zip",
         "/private/etc/hosts",
+        "/mnt/c/Users/me/Steam/steamapps/common/Balatro/Balatro.exe",
+        "/mnt/c/Program Files/Epic Games/Fortnite/big.pak",
+        "/mnt/d/XboxGames/Halo/Content/game.exe",
         "/private/var/db/stuff",
     ],
 )

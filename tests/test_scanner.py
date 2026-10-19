@@ -69,3 +69,19 @@ def test_unreadable_dirs_dont_crash(tmp_path):
         locked.chmod(0o755)
     assert [os.path.basename(c.path) for c in result.candidates] == ["ok.bin"]
     assert result.errors >= 1
+
+
+def test_marks_files_next_to_libraries(tmp_path):
+    make_file(tmp_path / "Game" / "game.exe", 60 * MB)
+    make_file(tmp_path / "Game" / "engine.dll", 1 * MB)
+    make_file(tmp_path / "Downloads" / "setup.exe", 60 * MB)
+
+    found = {os.path.basename(c.path): c for c in scan(tmp_path).candidates}
+
+    assert found["game.exe"].extra.get("next_to_libraries")
+    assert not found["setup.exe"].extra.get("next_to_libraries")
+
+
+def test_skips_steam_library(tmp_path):
+    make_file(tmp_path / "Steam" / "steamapps" / "common" / "Game" / "game.exe", 60 * MB)
+    assert scan(tmp_path).candidates == []

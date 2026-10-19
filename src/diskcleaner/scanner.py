@@ -137,12 +137,17 @@ def scan(
             result.errors += 1
             continue
 
+        has_dlls = False
+        found_here: list[Candidate] = []
+
         with it:
             for entry in it:
                 try:
                     if _is_link_like(entry):
                         continue
                     depth = len(Path(entry.path).parts) - root_depth
+                    if entry.name.lower().endswith((".dll", ".so", ".dylib")):
+                        has_dlls = True
 
                     if entry.is_dir(follow_symlinks=False):
                         if is_protected(entry.path):
@@ -175,7 +180,7 @@ def scan(
                 result.files_seen += 1
                 result.bytes_seen += st.st_size
                 if st.st_size >= min_file_size:
-                    result.candidates.append(
+                    found_here.append(
                         Candidate(
                             path=entry.path,
                             size=st.st_size,
@@ -186,5 +191,12 @@ def scan(
                             ext=os.path.splitext(entry.name)[1].lower(),
                         )
                     )
+
+        # An .exe sitting next to DLLs is an installed program, not a setup file.
+        # rules.py uses this to tell e.g. a game's exe apart from an installer.
+        if has_dlls:
+            for c in found_here:
+                c.extra["next_to_libraries"] = True
+        result.candidates.extend(found_here)
 
     return result

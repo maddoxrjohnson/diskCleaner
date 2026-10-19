@@ -44,6 +44,15 @@ def _retrain(store: Store) -> tuple[PreferenceModel, TrainReport]:
     return model, report
 
 
+def _load_model(store: Store) -> PreferenceModel:
+    model = PreferenceModel.load(model_path())
+    # a model saved before the feature set changed gets thrown out on load,
+    # so rebuild it from the saved labels rather than silently going rules-only
+    if not model.trained and store.labels():
+        model, _ = _retrain(store)
+    return model
+
+
 def _print_report(report: TrainReport) -> None:
     console.print(f"labels: {report.n_labels} ({report.n_delete} delete / {report.n_keep} keep)")
     if report.n_labels < 20 or min(report.n_delete, report.n_keep) == 0:
@@ -107,7 +116,7 @@ def scan_cmd(
 
     with Store() as store:
         store.save_scan(result, classified)
-        model = PreferenceModel.load(model_path())
+        model = _load_model(store)
         ranked = analyze.score([c for c in classified if c.rejected is None], model)
 
     shown = analyze.suggestions(ranked)
@@ -149,7 +158,7 @@ def review(
 
     with Store() as store:
         scan_id, root, _ = _require_scan(store)
-        model = PreferenceModel.load(model_path())
+        model = _load_model(store)
         ranked = analyze.score(store.candidates(scan_id), model)
         items = ranked if show_all else analyze.suggestions(ranked, threshold)
         if not items:

@@ -7,6 +7,7 @@ ranking. Afterwards it's blended with the model (see model.py).
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePath
 
 from diskcleaner.scanner import Candidate
@@ -63,6 +64,7 @@ CATEGORIES = [
     "log",
     "duplicate",
     "media",
+    "program",
     "data",
     "document",
     "other",
@@ -81,6 +83,7 @@ PRIORS = {
     "log": 0.80,
     "duplicate": 0.70,
     "media": 0.20,
+    "program": 0.05,
     "data": 0.25,
     "document": 0.10,
     "other": 0.25,
@@ -123,9 +126,33 @@ def categorize(c: Candidate, *, is_duplicate: bool = False) -> str:
         return "cache"
     if group in ("video", "audio", "image"):
         return "media"
+    if group == "installer":
+        return "installer" if looks_like_installer(c, ancestors) else "program"
     if group in CATEGORIES:
         return group
     return "other"
+
+
+_installer_name = re.compile(
+    r"setup|install|redist|update|upgrade"
+    r"|x64|x86|amd64|arm64|win32|win64"
+    r"|\d+\.\d+|\d{8}"  # version numbers like 1.15.1, or dates like 20250830
+)
+
+
+def looks_like_installer(c: Candidate, ancestors: list[str]) -> bool:
+    """Package formats are always installers. A bare .exe needs more evidence,
+    since games and portable apps are .exe files too."""
+    if c.ext != ".exe":
+        return True
+    if c.extra.get("next_to_libraries"):
+        return False
+    stem = PurePath(c.path).stem.lower()
+    if _installer_name.search(stem):
+        return True
+    # a loose exe in Downloads or on the Desktop was almost certainly downloaded
+    parent = ancestors[-1] if ancestors else ""
+    return parent in ("downloads", "desktop")
 
 
 def prior(c: Candidate, category: str, *, now: float) -> float:

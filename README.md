@@ -88,6 +88,7 @@ anything else, and nothing downstream can override them:
 
 - system folders (`C:\Windows`, `Program Files`, `/usr`, `/System`, ...) are never scanned
 - `.git`, `.ssh`, credential folders and cloud-synced folders (OneDrive, Dropbox, iCloud) are never suggested
+- game libraries (`steamapps`, Epic, GOG, Xbox, ...) are never suggested, since those should be uninstalled through their launcher
 - anything modified in the last 30 days is left alone
 - app data (`AppData`, `~/.config`, `~/Library`) is only suggested if it's inside a cache/temp/log folder
 - personal folders (Documents, Pictures, Videos, ...) only show up if the file is an exact duplicate
@@ -95,7 +96,11 @@ anything else, and nothing downstream can override them:
 **Heuristics** (`rules.py`) put each item in a category (installer, build
 artifact, package cache, duplicate, disk image, ...) and give it a starting
 probability of being junk. Before you've labeled anything, this is the whole
-ranking.
+ranking. One example of where this gets fiddly: a `.exe` only counts as an
+installer if it looks like one (sitting loose in Downloads/Desktop, or with
+"setup", a version number or an architecture in its name). An `.exe` sitting next to
+DLLs is an installed program and gets left alone. The first version just
+flagged every `.exe`, which happily suggested deleting my games.
 
 **Duplicates** (`dupes.py`) are found the usual cheap way: group by size, then a
 hash of the first and last 64 KB, then a full BLAKE2 hash only for files that
