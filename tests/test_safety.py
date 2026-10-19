@@ -21,6 +21,11 @@ OLD = time.time() - 400 * 86400
         "/mnt/c/Users/me/Steam/steamapps/common/Balatro/Balatro.exe",
         "/mnt/c/Program Files/Epic Games/Fortnite/big.pak",
         "/mnt/d/XboxGames/Halo/Content/game.exe",
+        "/mnt/c/Windows.old/Users/me/old.iso",
+        "/mnt/c/System Repair/image.wim",
+        "/mnt/c/Drivers/audio/setup.exe",
+        "/mnt/c/dell/updatepackage/log.zip",
+        "/mnt/c/Users/Default/AppData/Local/Temp/x.tmp",
         "/private/var/db/stuff",
     ],
 )
@@ -69,3 +74,12 @@ def test_personal_folders_need_to_be_duplicates():
 def test_drive_root_is_never_suggested():
     assert reject_reason("/", OLD) == "drive root"
     assert reject_reason("/mnt/c", OLD) == "drive root"
+
+
+def test_files_at_the_top_of_a_drive():
+    assert reject_reason("/mnt/c/hiberfil.sys", OLD) == "system file at the top of the drive"
+    assert reject_reason("/mnt/c/pagefile.sys", OLD) == "system file at the top of the drive"
+    assert reject_reason("/swapfile", OLD) == "system file at the top of the drive"
+    # but a folder like C:\Temp is fine
+    assert reject_reason("/mnt/c/Temp", OLD, is_dir=True) is None
+    assert reject_reason("/mnt/c/Temp/old.log", OLD) is None

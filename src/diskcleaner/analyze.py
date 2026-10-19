@@ -55,7 +55,12 @@ def classify(
     for c in result.candidates:
         dup_of = dupes.get(c.path)
         rejected = safety.reject_reason(
-            c.path, c.mtime, is_duplicate=dup_of is not None, min_age_days=min_age_days, now=now
+            c.path,
+            c.mtime,
+            is_dir=c.is_dir,
+            is_duplicate=dup_of is not None,
+            min_age_days=min_age_days,
+            now=now,
         )
         category = rules.categorize(c, is_duplicate=dup_of is not None)
         prior = rules.prior(c, category, now=now)

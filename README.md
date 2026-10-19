@@ -90,7 +90,8 @@ about 370k files in around 20 seconds.
 **Safety rules** (`safety.py`) are plain hard-coded checks that run before
 anything else, and nothing downstream can override them:
 
-- system folders (`C:\Windows`, `Program Files`, `/usr`, `/System`, ...) are never scanned
+- system folders (`C:\Windows`, `Program Files`, `Windows.old`, OEM recovery/driver folders, `/usr`, `/System`, ...) are never scanned
+- files sitting directly in a drive root (`pagefile.sys`, `hiberfil.sys`, ...) are never suggested
 - `.git`, `.ssh`, credential folders and cloud-synced folders (OneDrive, Dropbox, iCloud) are never suggested
 - game libraries (`steamapps`, Epic, GOG, Xbox, ...) are never suggested, since those should be uninstalled through their launcher
 - anything modified in the last 30 days is left alone

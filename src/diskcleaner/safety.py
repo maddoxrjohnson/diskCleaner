@@ -22,6 +22,28 @@ PROTECTED_TOP_LEVEL = {
     "system volume information",
     "recovery",
     "boot",
+    "system repair",
+    "perflogs",
+    "inetpub",
+    "config.msi",
+    "msocache",
+    # leftovers from Windows upgrades - use Disk Cleanup for these, the files
+    # are owned by TrustedInstaller and removing them by hand goes badly
+    "windows.old",
+    "$windows.~bt",
+    "$windows.~ws",
+    "$winreagent",
+    "$sysreset",
+    "$getcurrent",
+    # OEM recovery / driver folders (Dell, HP, Lenovo, ...)
+    "apps",
+    "drivers",
+    "dell",
+    "swsetup",
+    "oem",
+    "intel",
+    "amd",
+    "nvidia",
     # unix-ish
     "bin",
     "sbin",
@@ -47,6 +69,9 @@ PROTECTED_TOP_LEVEL = {
     "volumes",
     "cores",
 }
+
+# Built-in profiles under C:\Users that aren't a real person's stuff
+SYSTEM_PROFILES = {"default", "default user", "all users", "defaultapppool"}
 
 # If any component of a path matches one of these, hands off.
 NEVER_TOUCH_PARTS = {
@@ -119,6 +144,8 @@ def is_protected(path: str | PurePath) -> bool:
         return any(part in NEVER_TOUCH_PARTS for part in parts)
     if parts[0] in PROTECTED_TOP_LEVEL:
         return True
+    if parts[0] == "users" and len(parts) > 1 and parts[1] in SYSTEM_PROFILES:
+        return True
     return any(part in NEVER_TOUCH_PARTS for part in parts)
 
 
@@ -136,6 +163,7 @@ def reject_reason(
     path: str,
     mtime: float,
     *,
+    is_dir: bool = False,
     is_duplicate: bool = False,
     min_age_days: int = DEFAULT_MIN_AGE_DAYS,
     now: float | None = None,
@@ -146,6 +174,10 @@ def reject_reason(
         return "drive root"
     if is_protected(path):
         return "protected location"
+    # files sitting right in C:\ (or /) are things like pagefile.sys and
+    # hiberfil.sys. Folders there, like C:\Temp, are still fair game.
+    if len(parts) == 1 and not is_dir:
+        return "system file at the top of the drive"
 
     now = time.time() if now is None else now
     age_days = (now - mtime) / 86400
