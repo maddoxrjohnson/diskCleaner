@@ -45,6 +45,18 @@ CREATE TABLE IF NOT EXISTS labels (
     is_duplicate INTEGER NOT NULL,
     labeled_at   REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS usage_snapshots (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    root         TEXT NOT NULL,
+    taken_at     REAL NOT NULL,
+    depth        INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS usage_sizes (
+    snapshot_id  INTEGER NOT NULL REFERENCES usage_snapshots(id) ON DELETE CASCADE,
+    path         TEXT NOT NULL,
+    size         INTEGER NOT NULL,
+    PRIMARY KEY (snapshot_id, path)
+);
 """
 
 
@@ -170,3 +182,36 @@ class Store:
 
     def label_counts(self) -> dict[str, int]:
         return dict(self.conn.execute("SELECT label, COUNT(*) FROM labels GROUP BY label"))
+
+    def save_usage(self, root: str, rows: list[tuple[str, int]], depth: int) -> None:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO usage_snapshots (root, taken_at, depth) VALUES (?, ?, ?)",
+                (root, time.time(), depth),
+            )
+            sid = cur.lastrowid
+            self.conn.executemany(
+                "INSERT OR REPLACE INTO usage_sizes VALUES (?, ?, ?)",
+                [(sid, path, size) for path, size in rows],
+            )
+            # only the latest is compared against, keep a few in case that changes
+            self.conn.execute(
+                "DELETE FROM usage_snapshots WHERE root = ? AND id NOT IN "
+                "(SELECT id FROM usage_snapshots WHERE root = ? ORDER BY id DESC LIMIT 5)",
+                (root, root),
+            )
+
+    def last_usage(self, root: str) -> tuple[float, int, dict[str, int]] | None:
+        """(taken_at, depth, {path: size}) from the most recent snapshot of root."""
+        row = self.conn.execute(
+            "SELECT id, taken_at, depth FROM usage_snapshots WHERE root = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (root,),
+        ).fetchone()
+        if row is None:
+            return None
+        sid, taken_at, depth = row
+        sizes = dict(
+            self.conn.execute("SELECT path, size FROM usage_sizes WHERE snapshot_id = ?", (sid,))
+        )
+        return taken_at, depth, sizes

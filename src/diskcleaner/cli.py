@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import time
 from collections import Counter
@@ -9,8 +10,10 @@ from typing import Annotated
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
+from rich.tree import Tree
 
-from diskcleaner import analyze, safety
+from diskcleaner import analyze, safety, usage
 from diskcleaner.export import ExportItem, human_size, write_script
 from diskcleaner.model import PreferenceModel, TrainReport
 from diskcleaner.scanner import MB, scan
@@ -157,6 +160,136 @@ def scan_cmd(
                 f"  {human_size(c.candidate.size):>9}  {c.candidate.path}\n"
                 f"             [dim]{c.candidate.extra['managed_by']}[/]"
             )
+
+
+def _bar(fraction: float, width: int = 12) -> str:
+    filled = round(max(0.0, min(1.0, fraction)) * width)
+    return "\u2588" * filled + "\u2591" * (width - filled)
+
+
+def _signed_size(n: int) -> str:
+    return ("+" if n >= 0 else "-") + human_size(abs(n))
+
+
+def _print_spot(amount: Text, node: usage.Node) -> None:
+    line = amount + Text(f"  {node.path}")  # Text, so [brackets] in paths aren't markup
+    note = usage.note_for(node.name)
+    if note:
+        line.append(f"  - {note}", style="dim")
+    console.print(line, soft_wrap=True)
+
+
+@app.command()
+def space(
+    path: Annotated[Path | None, typer.Argument(help="Folder or drive. Defaults to home.")] = None,
+    depth: Annotated[int, typer.Option(help="How many levels of folders to show.")] = 3,
+    top: Annotated[int, typer.Option(help="Biggest N entries to show per folder.")] = 8,
+    since: Annotated[int, typer.Option(help="What counts as recent, in days.")] = 7,
+) -> None:
+    """Show what's taking up space and what grew. Only measures, never suggests."""
+    root = (path or Path.home()).expanduser().resolve()
+    if not root.is_dir():
+        console.print(f"[red]{root} is not a folder[/]")
+        raise typer.Exit(1)
+
+    with console.status(f"measuring {root} ...") as status:
+        result = usage.measure(
+            root,
+            since_days=since,
+            on_progress=lambda n, cur: status.update(f"read {n:,} folders  [dim]{cur}[/]"),
+        )
+    tree_root = result.root
+
+    with Store() as store:
+        previous = store.last_usage(tree_root.path)
+        store.save_usage(
+            tree_root.path,
+            usage.snapshot_rows(tree_root),
+            usage.KEEP_DEPTH + 1,  # +1 for big files below the deepest folder
+        )
+
+    def grew(n: usage.Node) -> int | None:
+        return usage.growth(n, previous[2], previous[1]) if previous else None
+
+    # anything smaller than this isn't worth a line
+    floor = max(tree_root.size // 200, 10 * MB)
+
+    def label(n: usage.Node, parent_size: int) -> Text:
+        frac = n.size / parent_size if parent_size else 0
+        line = Text(f"{human_size(n.size):>9}  ")
+        line.append(_bar(frac), style="cyan")
+        line.append(f" {frac:4.0%}  ")
+        line.append(n.name + ("" if n.is_dir else "  (file)"), style="bold" if n.is_dir else "")
+        g = grew(n)
+        if g is not None and abs(g) >= 100 * MB:
+            line.append(f"  {_signed_size(g)}", style="red" if g > 0 else "green")
+        elif previous is None and n.recent >= 100 * MB:
+            line.append(f"  {human_size(n.recent)} recent", style="yellow")
+        note = usage.note_for(n.name)
+        if note:
+            line.append(f"  - {note}", style="dim")
+        return line
+
+    def add(branch: Tree, node: usage.Node, level: int) -> None:
+        kids = sorted(node.children, key=lambda c: -c.size)
+        shown = [c for c in kids if c.size >= floor][:top]
+        for c in shown:
+            sub = branch.add(label(c, node.size))
+            # a folder that's nearly all one child (Users > you) doesn't use up a level
+            nxt = level if c.size >= 0.9 * node.size else level + 1
+            if nxt <= depth and c.children:
+                add(sub, c, nxt)
+        rest = node.size - sum(c.size for c in shown)
+        if shown and rest >= floor:
+            branch.add(Text(f"{human_size(rest):>9}  everything else", style="dim"))
+
+    heading = Text(f"{tree_root.path}  {human_size(tree_root.size)}", style="bold")
+    if os.path.ismount(tree_root.path):
+        du = shutil.disk_usage(tree_root.path)
+        heading.append(
+            f"   (drive: {human_size(du.used)} used of {human_size(du.total)}, "
+            f"{human_size(du.free)} free)",
+            style="",
+        )
+    tree = Tree(heading)
+    add(tree, tree_root, 1)
+    console.print(tree)
+
+    console.print(
+        f"[dim]{result.files:,} files in {result.seconds:.1f}s"
+        + (f", {result.errors:,} things couldn't be read" if result.errors else "")
+        + "[/]"
+    )
+    if os.path.ismount(tree_root.path):
+        hidden = du.used - tree_root.size
+        if hidden >= 1024 * MB:
+            console.print(
+                f"[dim]{human_size(hidden)} of the drive's used space isn't in any folder we "
+                "could read (restore points, other accounts, system files). Run as "
+                "administrator to see more of it.[/]"
+            )
+
+    threshold = max(100 * MB, tree_root.size // 500)
+    if previous is not None:
+        when = time.strftime("%b %d %H:%M", time.localtime(previous[0]))
+        total = grew(tree_root) or 0
+        console.print(f"\n[bold]Since the last check ({when}):[/] {_signed_size(total)} overall")
+        spots = usage.hotspots(tree_root, grew, threshold=threshold)
+        if not spots:
+            console.print("  nothing grew by more than " + human_size(threshold))
+        for n, g in spots:
+            _print_spot(Text(f"  {_signed_size(g):>10}", style="red"), n)
+    else:
+        console.print(f"\n[bold]Written to in the last {since} days:[/]")
+        spots = usage.hotspots(tree_root, lambda n: n.recent, threshold=threshold)
+        if not spots:
+            console.print("  nothing big")
+        for n, r in spots:
+            _print_spot(Text(f"  {human_size(r):>10}", style="yellow"), n)
+        console.print(
+            "[dim]That includes files that were only updated, not new. "
+            "From the next run on this shows exactly what grew since now.[/]"
+        )
 
 
 @app.command()

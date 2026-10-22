@@ -47,6 +47,7 @@ diskcleaner export               # write the cleanup script
 diskcleaner stats                # what you've labeled, what the last scan found
 diskcleaner train                # retrain the model by hand (review does this for you)
 diskcleaner forget               # wipe all saved scans, labels and the model
+diskcleaner space C:\            # where is all my space going? (just measures)
 ```
 
 In `review`:
@@ -69,6 +70,31 @@ rows are usually most of the space you'll get back.
 
 If you're on WSL scanning `/mnt/c/...`, `diskcleaner export --format ps1`
 converts the paths so you can run the script from Windows PowerShell.
+
+### Where did my space go?
+
+`scan` only shows things it thinks are safe to remove, so it's no help when
+the drive keeps filling up with something it would never suggest. `space`
+measures everything instead, system folders included, and suggests nothing:
+
+```
+C:\  345.3 GB   (drive: 399.2 GB used of 455.5 GB, 56.2 GB free)
+├──  213.8 GB  ███████░░░░░  62%  Users
+│   └──  213.5 GB  ████████████ 100%  alex
+│       ├──  ...
+├──   23.0 GB  █░░░░░░░░░░░   7%  pagefile.sys  (file)  - Windows virtual memory ...
+
+Since the last check (Oct 19 21:10): +31.2 GB overall
+     +20.6 GB  C:\Users\alex\AppData\Local\Temp\DiagOutputDir
+     +12.8 GB  C:\Users\alex\AppData\Local\Docker  - Docker Desktop data
+```
+
+Every run saves a snapshot of folder sizes, and the next run compares against
+it. The "what grew" list walks down the tree while one child explains most of
+its parent's growth, so you get the folder that's actually filling up instead
+of just `C:\Users`. On the first run there's nothing to compare against yet, so
+it lists where files were written in the last week instead. That's how I found
+a Remote Desktop trace log that was writing 20 GB a day into my Temp folder.
 
 ## How it works
 
@@ -170,6 +196,7 @@ on Linux, macOS and Windows.
 - an opt-in mode that sends approved items straight to the trash from the review screen
 - smarter "is this project dead?" detection for build folders (last git commit date)
 - incremental rescans instead of walking everything again
+- a treemap view for `space`
 
 ## License
 
