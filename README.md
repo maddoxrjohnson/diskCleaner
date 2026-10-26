@@ -84,7 +84,7 @@ C:\  345.3 GB   (drive: 399.2 GB used of 455.5 GB, 56.2 GB free)
 │       ├──  ...
 ├──   23.0 GB  █░░░░░░░░░░░   7%  pagefile.sys  (file)  - Windows virtual memory ...
 
-Since the last check (Oct 19 21:10): +31.2 GB overall
+Since the last check (Oct 19 21:10): 33.4 GB added, 2.2 GB removed
      +20.6 GB  C:\Users\alex\AppData\Local\Temp\DiagOutputDir
      +12.8 GB  C:\Users\alex\AppData\Local\Docker  - Docker Desktop data
 ```
@@ -92,7 +92,8 @@ Since the last check (Oct 19 21:10): +31.2 GB overall
 Every run saves a snapshot of folder sizes, and the next run compares against
 it. The "what grew" list walks down the tree while one child explains most of
 its parent's growth, so you get the folder that's actually filling up instead
-of just `C:\Users`. On the first run there's nothing to compare against yet, so
+of just `C:\Users`. It adds up only the increases, so deleting 20 GB from one
+folder can't hide 10 GB of growth in the folder next to it. On the first run there's nothing to compare against yet, so
 it lists where files were written in the last week instead. That's how I found
 a Remote Desktop trace log that was writing 20 GB a day into my Temp folder.
 

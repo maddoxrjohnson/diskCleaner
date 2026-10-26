@@ -272,13 +272,23 @@ def space(
     threshold = max(100 * MB, tree_root.size // 500)
     if previous is not None:
         when = time.strftime("%b %d %H:%M", time.localtime(previous[0]))
-        total = grew(tree_root) or 0
-        console.print(f"\n[bold]Since the last check ({when}):[/] {_signed_size(total)} overall")
-        spots = usage.hotspots(tree_root, grew, threshold=threshold)
+        up = usage.gross(tree_root, grew)
+        down = usage.gross(tree_root, lambda n: None if grew(n) is None else -grew(n))
+        console.print(
+            f"\n[bold]Since the last check ({when}):[/] "
+            f"{human_size(up.get(id(tree_root), 0))} added, "
+            f"{human_size(down.get(id(tree_root), 0))} removed"
+        )
+        spots = usage.hotspots(tree_root, lambda n: up.get(id(n)), threshold=threshold)
         if not spots:
             console.print("  nothing grew by more than " + human_size(threshold))
         for n, g in spots:
             _print_spot(Text(f"  {_signed_size(g):>10}", style="red"), n)
+        freed = usage.hotspots(tree_root, lambda n: down.get(id(n)), threshold=threshold, limit=3)
+        if freed:
+            console.print("[dim]  biggest drops:[/]")
+            for n, g in freed:
+                _print_spot(Text(f"  {_signed_size(-g):>10}", style="green"), n)
     else:
         console.print(f"\n[bold]Written to in the last {since} days:[/]")
         spots = usage.hotspots(tree_root, lambda n: n.recent, threshold=threshold)

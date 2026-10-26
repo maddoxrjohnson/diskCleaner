@@ -186,6 +186,25 @@ def growth(node: Node, previous: dict[str, int], snapshot_depth: int) -> int | N
     return node.size - previous.get(node.path, 0)
 
 
+def gross(root: Node, value: Callable[[Node], int | None]) -> dict[int, int]:
+    """Only the increases, per node, keyed by id(node).
+
+    Net change hides things: if you deleted 20 GB from Temp and something else
+    in AppData grew 10 GB, AppData looks like it shrank and the 10 GB never
+    shows up. So add up the positive parts from the bottom instead.
+    Pass a negated value to get the decreases.
+    """
+    out: dict[int, int] = {}
+    for n in reversed(list(root.walk())):
+        v = value(n)
+        if v is None:
+            continue
+        kids = [(c, value(c)) for c in n.children]
+        own = v - sum(cv for _, cv in kids if cv is not None)
+        out[id(n)] = max(own, 0) + sum(out.get(id(c), 0) for c, _ in kids)
+    return out
+
+
 def hotspots(
     root: Node,
     value: Callable[[Node], int | None],

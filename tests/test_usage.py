@@ -104,3 +104,22 @@ def test_hotspots_look_inside_mixed_folders(tmp_path):
     spots = usage.hotspots(tree, lambda n: n.recent, threshold=100 * MB)
 
     assert [n.name for n, _ in spots] == ["trace.etl"]
+
+
+def test_growth_not_hidden_by_a_deletion_next_to_it(tmp_path):
+    local = tmp_path / "AppData" / "Local"
+    big = make_file(local / "Temp" / "traces.etl", 500 * MB)
+    tree = usage.measure(tmp_path).root
+    previous = dict(usage.snapshot_rows(tree))
+
+    big.unlink()
+    make_file(local / "SomeApp" / "vm.vhdx", 300 * MB)
+    tree = usage.measure(tmp_path).root
+
+    def grew(n):
+        return usage.growth(n, previous, usage.KEEP_DEPTH + 1)
+
+    assert grew(find(tree, "Local")) == -200 * MB  # net, which hides the new 300 MB
+    up = usage.gross(tree, grew)
+    spots = usage.hotspots(tree, lambda n: up.get(id(n)), threshold=100 * MB)
+    assert [(n.name, v) for n, v in spots] == [("vm.vhdx", 300 * MB)]
