@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from diskcleaner import rules, safety
+from diskcleaner import rules, safety, worktree
 from diskcleaner.dupes import duplicate_paths
 from diskcleaner.features import featurize
 from diskcleaner.model import PreferenceModel
@@ -37,6 +37,8 @@ class Suggestion:
     def group_key(self) -> str:
         """Things that get rolled up together in the review screen."""
         c = self.item.candidate
+        if self.item.category == "worktree":
+            return "worktree"
         if c.is_dir:
             return c.path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].lower()
         return self.item.category
@@ -54,12 +56,20 @@ def classify(
     out = []
     for c in result.candidates:
         dup_of = dupes.get(c.path)
+        verdict = None
+        if c.extra.get("worktree"):
+            check = worktree.check(c.path)
+            verdict = check.reason
+            if check.finished:
+                c.extra["finished"] = check.reason
         rejected = safety.reject_reason(
             c.path,
             c.mtime,
             is_dir=c.is_dir,
             is_duplicate=dup_of is not None,
             managed_by=c.extra.get("managed_by"),
+            worktree=verdict,
+            finished=bool(c.extra.get("finished")),
             min_age_days=min_age_days,
             now=now,
         )
@@ -116,6 +126,9 @@ def score(
             why, why_not, mp = rules.explain(item.candidate, item.category, now=now), [], None
         if item.duplicate_of:
             why = [*why, f"copy of {item.duplicate_of}"]
+        if item.candidate.extra.get("finished"):
+            # the model's reasons can't say this, and it's the reason that matters
+            why = [item.candidate.extra["finished"], *why, "then `git worktree prune` in the repo"]
         out.append(Suggestion(item, float(final[idx]), mp, why, why_not))
 
     out.sort(key=lambda s: s.size * s.score, reverse=True)

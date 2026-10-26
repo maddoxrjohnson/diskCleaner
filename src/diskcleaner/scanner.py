@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from diskcleaner.safety import is_protected
+from diskcleaner.worktree import gitdir
 
 MB = 1024 * 1024
 
@@ -218,6 +219,26 @@ def scan(
                 continue
         siblings = {e.name.lower() for e in entries}
         parent_name = os.path.basename(current).lower()
+
+        # a linked git worktree (a .git *file*) is one checkout, judged as a whole
+        if current != root and ".git" in siblings and gitdir(current):
+            size, count, mtime, atime = dir_stats(current)
+            result.files_seen += count
+            result.bytes_seen += size
+            if size >= min_dir_size:
+                result.candidates.append(
+                    Candidate(
+                        path=current,
+                        size=size,
+                        is_dir=True,
+                        mtime=mtime,
+                        atime=atime,
+                        file_count=count,
+                        depth=len(Path(current).parts) - root_depth,
+                        extra={"worktree": True},
+                    )
+                )
+            continue
 
         for entry in entries:
             try:

@@ -166,10 +166,17 @@ def reject_reason(
     is_dir: bool = False,
     is_duplicate: bool = False,
     managed_by: str | None = None,
+    worktree: str | None = None,
+    finished: bool = False,
     min_age_days: int = DEFAULT_MIN_AGE_DAYS,
     now: float | None = None,
 ) -> str | None:
-    """Return a short reason string if this item must never be suggested."""
+    """Return a short reason string if this item must never be suggested.
+
+    `worktree` is git's verdict on a worktree folder; `finished` means git
+    confirmed there's nothing in it that isn't saved elsewhere, which is the
+    one thing allowed to skip the age rule.
+    """
     parts = _parts(path)
     if not parts:
         return "drive root"
@@ -182,9 +189,12 @@ def reject_reason(
     if len(parts) == 1 and not is_dir:
         return "system file at the top of the drive"
 
+    if worktree is not None and not finished:
+        return f"git worktree that isn't finished: {worktree}"
+
     now = time.time() if now is None else now
     age_days = (now - mtime) / 86400
-    if age_days < min_age_days:
+    if age_days < min_age_days and not finished:
         return f"modified in the last {min_age_days} days"
 
     if _in_config_home(parts) and not any(p in DISPOSABLE_PARTS for p in parts):

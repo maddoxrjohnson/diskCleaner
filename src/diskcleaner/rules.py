@@ -54,6 +54,7 @@ EXT_GROUPS = {
 }
 
 CATEGORIES = [
+    "worktree",
     "package_cache",
     "build_artifact",
     "cache",
@@ -73,6 +74,7 @@ CATEGORIES = [
 # Starting guesses at P(junk). Tuned by gut feel, which is kind of the point:
 # the model is supposed to correct these over time.
 PRIORS = {
+    "worktree": 0.90,  # only ever a candidate once git says it's finished
     "package_cache": 0.75,
     "build_artifact": 0.80,
     "cache": 0.85,
@@ -103,6 +105,8 @@ def categorize(c: Candidate, *, is_duplicate: bool = False) -> str:
     name = parts[-1] if parts else ""
 
     if c.is_dir:
+        if c.extra.get("worktree"):
+            return "worktree"
         if name in PACKAGE_CACHE_DIRS:
             return "package_cache"
         if name in BUILD_DIRS:
@@ -157,6 +161,8 @@ def looks_like_installer(c: Candidate, ancestors: list[str]) -> bool:
 
 def prior(c: Candidate, category: str, *, now: float) -> float:
     p = PRIORS.get(category, 0.25)
+    if category == "worktree":
+        return p  # finished is finished, age doesn't say anything here
     parts = {x.lower() for x in PurePath(c.path).parts}
     # mtime, not atime: Windows Defender and search indexing bump access
     # times all the time, so atime makes everything look recently used.

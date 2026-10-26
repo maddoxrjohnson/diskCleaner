@@ -123,7 +123,8 @@ anything else, and nothing downstream can override them:
 - virtual machines and emulators (Android `.avd`, VirtualBox, VMware, Hyper-V, WSL disks) are kept as one item and never suggested, since deleting their files by hand breaks them. The scan lists them separately with how to remove them properly.
 - `.git`, `.ssh`, credential folders and cloud-synced folders (OneDrive, Dropbox, iCloud) are never suggested
 - game libraries (`steamapps`, Epic, GOG, Xbox, ...) are never suggested, since those should be uninstalled through their launcher
-- anything modified in the last 30 days is left alone
+- anything modified in the last 30 days is left alone, with one exception: git worktrees that git itself confirms are finished (see below)
+- a git worktree with uncommitted or untracked changes, ignored files like `.env` or `*.db`, or commits that aren't on any other branch is never suggested, however old it is
 - app data (`AppData`, `~/.config`, `~/Library`) is only suggested if it's inside a cache/temp/log folder
 - personal folders (Documents, Pictures, Videos, ...) only show up if the file is an exact duplicate
 
@@ -135,6 +136,17 @@ installer if it looks like one (sitting loose in Downloads/Desktop, or with
 "setup", a version number or an architecture in its name). An `.exe` sitting next to
 DLLs is an installed program and gets left alone. The first version just
 flagged every `.exe`, which happily suggested deleting my games.
+
+**Finished git worktrees** (`worktree.py`) are the one thing allowed past the
+30-day rule. Coding agents make a worktree per task and leave them behind, and
+each one is a full checkout with its own `node_modules`, so they add up fast.
+They're always recent, but age is the wrong question for them anyway. A
+worktree is suggested only if `git status` shows nothing uncommitted or
+untracked, the only ignored files are things like `node_modules` (not `.env`,
+keys or databases), and its commit is also on another branch or a remote. If
+git can't answer, for example a worktree made by Windows git and scanned from
+WSL, it counts as not finished. Afterwards `git worktree prune` tidies git's
+list of worktrees.
 
 **Duplicates** (`dupes.py`) are found the usual cheap way: group by size, then a
 hash of the first and last 64 KB, then a full BLAKE2 hash only for files that
