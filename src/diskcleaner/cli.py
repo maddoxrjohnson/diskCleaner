@@ -373,6 +373,48 @@ def export_cmd(
 
 
 @app.command()
+def skipped(
+    top: Annotated[int, typer.Option(help="How many to print.")] = 40,
+    reason: Annotated[
+        str | None, typer.Option(help="Only show reasons containing this, e.g. 'days'.")
+    ] = None,
+) -> None:
+    """Big items from the last scan that the safety rules kept out, and why."""
+    with Store() as store:
+        scan_id, _, _ = _require_scan(store)
+        items = [
+            sc for sc in store.candidates(scan_id, include_rejected=True) if sc.rejected is not None
+        ]
+    if reason:
+        items = [sc for sc in items if reason.lower() in sc.rejected.lower()]
+    if not items:
+        console.print("Nothing was ruled out.")
+        return
+    items.sort(key=lambda sc: -sc.candidate.size)
+
+    by_reason: Counter[str] = Counter()
+    for sc in items:
+        # "modified in the last 30 days" etc. would otherwise split on the number
+        by_reason[sc.rejected.split(":")[0]] += sc.candidate.size
+    for why, size in by_reason.most_common():
+        console.print(f"  {human_size(size):>9}  {why}")
+
+    table = Table(header_style="bold")
+    table.add_column("size", justify="right")
+    table.add_column("why it's not suggested")
+    table.add_column("path", overflow="fold")
+    for sc in items[:top]:
+        table.add_row(human_size(sc.candidate.size), sc.rejected, sc.candidate.path)
+    console.print(table)
+    if len(items) > top:
+        console.print(f"[dim]{len(items) - top} more, use --top to see them[/]")
+    console.print(
+        "[dim]These are never suggested. Most are recent (they'll show up once they're "
+        "older) or belong to the system or another app.[/]"
+    )
+
+
+@app.command()
 def stats() -> None:
     """What you've labeled so far and what the latest scan found."""
     with Store() as store:

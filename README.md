@@ -45,6 +45,7 @@ diskcleaner scan ~/Downloads     # or a specific folder
 diskcleaner review               # go through suggestions interactively
 diskcleaner export               # write the cleanup script
 diskcleaner stats                # what you've labeled, what the last scan found
+diskcleaner skipped              # big items the safety rules kept out, and why
 diskcleaner train                # retrain the model by hand (review does this for you)
 diskcleaner forget               # wipe all saved scans, labels and the model
 diskcleaner space C:\            # where is all my space going? (just measures)

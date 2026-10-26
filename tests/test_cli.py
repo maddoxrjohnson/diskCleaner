@@ -69,3 +69,16 @@ def test_scan_lists_vms_separately(tmp_path):
         scan_id, _, _ = store.latest_scan()
         suggestable = [os.path.basename(i.candidate.path) for i in store.candidates(scan_id)]
     assert suggestable == ["setup.exe"]
+
+
+def test_skipped_lists_ruled_out_items(tmp_path):
+    root = tmp_path / "home"
+    make_file(root / "Downloads" / "fresh.zip", 80 * MB, age_days=2)
+    make_file(root / "Downloads" / "setup.exe", 80 * MB, age_days=300)
+    runner.invoke(app, ["scan", str(root)])
+
+    result = runner.invoke(app, ["skipped"])
+
+    assert result.exit_code == 0, result.output
+    assert "modified in the last 30 days" in result.output
+    assert "setup.exe" not in result.output
